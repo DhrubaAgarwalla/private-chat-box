@@ -9,8 +9,6 @@
     "lint": "next lint"
   },
   "dependencies": {
-    "@100mslive/hms-video-store": "^0.12.33",
-    "@100mslive/react-sdk": "^0.10.33",
     "@daily-co/daily-js": "^0.76.0",
     "@radix-ui/react-slot": "^1.1.2",
     "@supabase/auth-helpers-nextjs": "^0.10.0",
