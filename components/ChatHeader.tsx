@@ -1,7 +1,7 @@
 import { ChevronLeft, UserIcon, Video } from "lucide-react";
 import { useChat } from "@/context/ChatContext";
 import { useState } from "react";
-import VideoChat from "./VideoChat";
+import VideoChat from "./video-chat";
 
 export function ChatHeader() {
   const { currentRoomId, setCurrentRoomId } = useChat();

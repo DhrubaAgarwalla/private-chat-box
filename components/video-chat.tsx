@@ -16,52 +16,101 @@ export default function VideoChat({ roomId }: VideoChatProps) {
   const [isVideoOn, setIsVideoOn] = useState(true);
   const [isAudioOn, setIsAudioOn] = useState(true);
   const [isCallActive, setIsCallActive] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [isInitialized, setIsInitialized] = useState(false);
   
   const myVideo = useRef<HTMLVideoElement>(null);
   const remoteVideo = useRef<HTMLVideoElement>(null);
   const socketRef = useRef<Socket | null>(null);
   const { currentRoomId } = useChat();
 
+  // Initialize socket connection
   useEffect(() => {
-    // Connect to signaling server
-    socketRef.current = io(process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:3001');
+    const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:3001';
+    console.log('Connecting to socket server:', socketUrl);
+    
+    socketRef.current = io(socketUrl, {
+      transports: ['websocket'],
+      upgrade: false
+    });
 
-    // Request camera and microphone permissions
+    socketRef.current.on('connect', () => {
+      console.log('Socket connected');
+      socketRef.current?.emit('joinRoom', roomId);
+    });
+
+    socketRef.current.on('connect_error', (error) => {
+      console.error('Socket connection error:', error);
+      setError('Failed to connect to video chat server');
+    });
+
+    return () => {
+      if (socketRef.current) {
+        socketRef.current.disconnect();
+      }
+    };
+  }, [roomId]);
+
+  // Initialize media stream
+  useEffect(() => {
+    if (!socketRef.current?.connected) return;
+
     navigator.mediaDevices.getUserMedia({
       video: true,
       audio: true
     })
     .then(currentStream => {
+      console.log('Got media stream');
       setStream(currentStream);
       if (myVideo.current) {
         myVideo.current.srcObject = currentStream;
       }
+      setIsInitialized(true);
+    })
+    .catch(err => {
+      console.error('Error accessing media devices:', err);
+      setError('Failed to access camera and microphone. Please check your permissions.');
     });
 
     return () => {
-      // Cleanup
       if (stream) {
         stream.getTracks().forEach(track => track.stop());
       }
-      if (socketRef.current) {
-        socketRef.current.disconnect();
-      }
-      if (peer) {
-        peer.destroy();
-      }
     };
-  }, []);
+  }, [socketRef.current?.connected]);
+
+  // Set up call event listeners
+  useEffect(() => {
+    if (!socketRef.current || !isInitialized) return;
+
+    const handleIncomingCall = ({ from, signal }: { from: string; signal: any }) => {
+      console.log('Received call from:', from);
+      answerCall(signal);
+    };
+
+    socketRef.current.on('callUser', handleIncomingCall);
+
+    return () => {
+      socketRef.current?.off('callUser', handleIncomingCall);
+    };
+  }, [isInitialized]);
 
   const startCall = () => {
-    if (!stream || !socketRef.current) return;
+    if (!stream || !socketRef.current?.connected) {
+      console.error('Stream or socket not available');
+      setError('Cannot start call - please check your camera and internet connection');
+      return;
+    }
 
-    const peer = new SimplePeer({
+    console.log('Starting call to room:', roomId);
+    const newPeer = new SimplePeer({
       initiator: true,
       trickle: false,
       stream
     });
 
-    peer.on('signal', data => {
+    newPeer.on('signal', data => {
+      console.log('Sending signal data');
       socketRef.current?.emit('callUser', {
         userToCall: roomId,
         signalData: data,
@@ -69,41 +118,62 @@ export default function VideoChat({ roomId }: VideoChatProps) {
       });
     });
 
-    peer.on('stream', remoteStream => {
+    newPeer.on('stream', remoteStream => {
+      console.log('Received remote stream');
       if (remoteVideo.current) {
         remoteVideo.current.srcObject = remoteStream;
       }
     });
 
+    newPeer.on('error', err => {
+      console.error('Peer error:', err);
+      setError('Failed to establish peer connection');
+      endCall();
+    });
+
     socketRef.current.on('callAccepted', signal => {
-      peer.signal(signal);
+      console.log('Call accepted, signaling peer');
+      newPeer.signal(signal);
       setIsCallActive(true);
     });
 
-    setPeer(peer);
+    setPeer(newPeer);
   };
 
   const answerCall = (incomingSignal: any) => {
-    if (!stream || !socketRef.current) return;
+    if (!stream || !socketRef.current?.connected) {
+      console.error('Stream or socket not available');
+      setError('Cannot answer call - please check your camera and internet connection');
+      return;
+    }
 
-    const peer = new SimplePeer({
+    console.log('Answering call');
+    const newPeer = new SimplePeer({
       initiator: false,
       trickle: false,
       stream
     });
 
-    peer.on('signal', data => {
+    newPeer.on('signal', data => {
+      console.log('Sending answer signal');
       socketRef.current?.emit('answerCall', { signal: data, to: roomId });
     });
 
-    peer.on('stream', remoteStream => {
+    newPeer.on('stream', remoteStream => {
+      console.log('Received remote stream');
       if (remoteVideo.current) {
         remoteVideo.current.srcObject = remoteStream;
       }
     });
 
-    peer.signal(incomingSignal);
-    setPeer(peer);
+    newPeer.on('error', err => {
+      console.error('Peer error:', err);
+      setError('Failed to establish peer connection');
+      endCall();
+    });
+
+    newPeer.signal(incomingSignal);
+    setPeer(newPeer);
     setIsCallActive(true);
   };
 
@@ -128,18 +198,24 @@ export default function VideoChat({ roomId }: VideoChatProps) {
   const endCall = () => {
     if (peer) {
       peer.destroy();
+      setPeer(null);
     }
     setIsCallActive(false);
   };
 
-  useEffect(() => {
-    if (!socketRef.current) return;
-
-    socketRef.current.on('callUser', ({ from, signal }) => {
-      // Handle incoming call
-      answerCall(signal);
-    });
-  }, [socketRef.current]);
+  if (error) {
+    return (
+      <div className="text-red-500 p-4 text-center">
+        <p>{error}</p>
+        <button
+          onClick={() => setError(null)}
+          className="mt-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600"
+        >
+          Try Again
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col items-center">
@@ -188,9 +264,14 @@ export default function VideoChat({ roomId }: VideoChatProps) {
         {!isCallActive ? (
           <button
             onClick={startCall}
-            className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600"
+            disabled={!isInitialized}
+            className={`px-4 py-2 text-white rounded-lg ${
+              isInitialized 
+                ? 'bg-green-500 hover:bg-green-600' 
+                : 'bg-gray-400 cursor-not-allowed'
+            }`}
           >
-            Start Call
+            {isInitialized ? 'Start Call' : 'Initializing...'}
           </button>
         ) : (
           <button
