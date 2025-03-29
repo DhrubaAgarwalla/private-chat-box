@@ -4,7 +4,8 @@ import { useEffect, useRef, useState } from 'react';
 import SimplePeer from 'simple-peer';
 import { io, Socket } from 'socket.io-client';
 import { useChat } from '@/context/ChatContext';
-import { FaVideo, FaVideoSlash, FaMicrophone, FaMicrophoneSlash } from 'react-icons/fa';
+import { FaVideo, FaVideoSlash, FaMicrophone, FaMicrophoneSlash, FaPhone, FaPhoneSlash } from 'react-icons/fa';
+import { toast } from 'react-hot-toast';
 
 interface VideoChatProps {
   roomId: string;
@@ -16,6 +17,7 @@ export default function VideoChat({ roomId }: VideoChatProps) {
   const [isVideoOn, setIsVideoOn] = useState(true);
   const [isAudioOn, setIsAudioOn] = useState(true);
   const [isCallActive, setIsCallActive] = useState(false);
+  const [incomingCall, setIncomingCall] = useState<{ from: string; signal: any } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isInitialized, setIsInitialized] = useState(false);
   
@@ -85,7 +87,34 @@ export default function VideoChat({ roomId }: VideoChatProps) {
 
     const handleIncomingCall = ({ from, signal }: { from: string; signal: any }) => {
       console.log('Received call from:', from);
-      answerCall(signal);
+      setIncomingCall({ from, signal });
+      toast.custom((t) => (
+        <div className={`${t.visible ? 'animate-enter' : 'animate-leave'} bg-white shadow-lg rounded-lg p-4`}>
+          <p className="text-gray-800">Incoming video call...</p>
+          <div className="mt-4 flex justify-end space-x-2">
+            <button
+              onClick={() => {
+                toast.dismiss(t.id);
+                answerCall(signal);
+              }}
+              className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600"
+            >
+              Accept
+            </button>
+            <button
+              onClick={() => {
+                toast.dismiss(t.id);
+                setIncomingCall(null);
+              }}
+              className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600"
+            >
+              Decline
+            </button>
+          </div>
+        </div>
+      ), {
+        duration: 30000, // 30 seconds
+      });
     };
 
     socketRef.current.on('callUser', handleIncomingCall);
@@ -135,9 +164,11 @@ export default function VideoChat({ roomId }: VideoChatProps) {
       console.log('Call accepted, signaling peer');
       newPeer.signal(signal);
       setIsCallActive(true);
+      toast.success('Call connected!');
     });
 
     setPeer(newPeer);
+    toast.loading('Calling...');
   };
 
   const answerCall = (incomingSignal: any) => {
@@ -175,6 +206,8 @@ export default function VideoChat({ roomId }: VideoChatProps) {
     newPeer.signal(incomingSignal);
     setPeer(newPeer);
     setIsCallActive(true);
+    setIncomingCall(null);
+    toast.success('Call connected!');
   };
 
   const toggleVideo = () => {
@@ -201,6 +234,8 @@ export default function VideoChat({ roomId }: VideoChatProps) {
       setPeer(null);
     }
     setIsCallActive(false);
+    setIncomingCall(null);
+    toast.success('Call ended');
   };
 
   if (error) {
@@ -265,19 +300,21 @@ export default function VideoChat({ roomId }: VideoChatProps) {
           <button
             onClick={startCall}
             disabled={!isInitialized}
-            className={`px-4 py-2 text-white rounded-lg ${
+            className={`px-4 py-2 text-white rounded-lg flex items-center space-x-2 ${
               isInitialized 
                 ? 'bg-green-500 hover:bg-green-600' 
                 : 'bg-gray-400 cursor-not-allowed'
             }`}
           >
+            <FaPhone className="mr-2" />
             {isInitialized ? 'Start Call' : 'Initializing...'}
           </button>
         ) : (
           <button
             onClick={endCall}
-            className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600"
+            className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 flex items-center"
           >
+            <FaPhoneSlash className="mr-2" />
             End Call
           </button>
         )}

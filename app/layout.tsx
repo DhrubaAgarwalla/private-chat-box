@@ -9,7 +9,7 @@ const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
   title: "Private Chat Box",
-  description: "A secure and private chat application",
+  description: "A secure private chat application with video calling capabilities",
 };
 
 export default function RootLayout({
@@ -21,8 +21,8 @@ export default function RootLayout({
     <html lang="en">
       <body className={inter.className}>
         <ChatProvider>
+          <Toaster position="top-right" />
           {children}
-          <Toaster position="top-center" />
         </ChatProvider>
       </body>
     </html>
