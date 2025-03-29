@@ -21,6 +21,7 @@ export default function VideoChat({ roomId }: VideoChatProps) {
   const [error, setError] = useState<string | null>(null);
   const [isInitialized, setIsInitialized] = useState(false);
   const [isCaller, setIsCaller] = useState(false);
+  const [callingToastId, setCallingToastId] = useState<string | null>(null);
   
   const myVideo = useRef<HTMLVideoElement>(null);
   const remoteVideo = useRef<HTMLVideoElement>(null);
@@ -89,7 +90,9 @@ export default function VideoChat({ roomId }: VideoChatProps) {
     const handleIncomingCall = ({ from, signal }: { from: string; signal: any }) => {
       console.log('Received call from:', from);
       setIncomingCall({ from, signal });
-      toast.custom((t) => (
+      
+      // Show call notification in chat box
+      const toastId = toast.custom((t) => (
         <div className={`${t.visible ? 'animate-enter' : 'animate-leave'} bg-white shadow-lg rounded-lg p-4`}>
           <p className="text-gray-800">Incoming video call...</p>
           <div className="mt-4 flex justify-end space-x-2">
@@ -166,11 +169,16 @@ export default function VideoChat({ roomId }: VideoChatProps) {
       console.log('Call accepted, signaling peer');
       newPeer.signal(signal);
       setIsCallActive(true);
+      if (callingToastId) {
+        toast.dismiss(callingToastId);
+        setCallingToastId(null);
+      }
       toast.success('Call connected!');
     });
 
     setPeer(newPeer);
-    toast.loading('Calling...');
+    const toastId = toast.loading('Calling...');
+    setCallingToastId(toastId);
   };
 
   const answerCall = (incomingSignal: any) => {
@@ -239,6 +247,10 @@ export default function VideoChat({ roomId }: VideoChatProps) {
       stream.getTracks().forEach(track => track.stop());
       setStream(null);
     }
+    if (callingToastId) {
+      toast.dismiss(callingToastId);
+      setCallingToastId(null);
+    }
     setIsCallActive(false);
     setIncomingCall(null);
     setIsCaller(false);
@@ -303,7 +315,7 @@ export default function VideoChat({ roomId }: VideoChatProps) {
       </div>
 
       <div className="mt-4 flex space-x-4">
-        {!isCallActive && !incomingCall ? (
+        {!isCallActive && !incomingCall && !isCaller ? (
           <button
             onClick={startCall}
             disabled={!isInitialized}
