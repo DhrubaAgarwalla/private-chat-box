@@ -20,6 +20,7 @@ export default function VideoChat({ roomId }: VideoChatProps) {
   const [incomingCall, setIncomingCall] = useState<{ from: string; signal: any } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isInitialized, setIsInitialized] = useState(false);
+  const [isCaller, setIsCaller] = useState(false);
   
   const myVideo = useRef<HTMLVideoElement>(null);
   const remoteVideo = useRef<HTMLVideoElement>(null);
@@ -132,6 +133,7 @@ export default function VideoChat({ roomId }: VideoChatProps) {
     }
 
     console.log('Starting call to room:', roomId);
+    setIsCaller(true);
     const newPeer = new SimplePeer({
       initiator: true,
       trickle: false,
@@ -233,8 +235,13 @@ export default function VideoChat({ roomId }: VideoChatProps) {
       peer.destroy();
       setPeer(null);
     }
+    if (stream) {
+      stream.getTracks().forEach(track => track.stop());
+      setStream(null);
+    }
     setIsCallActive(false);
     setIncomingCall(null);
+    setIsCaller(false);
     toast.success('Call ended');
   };
 
@@ -296,7 +303,7 @@ export default function VideoChat({ roomId }: VideoChatProps) {
       </div>
 
       <div className="mt-4 flex space-x-4">
-        {!isCallActive ? (
+        {!isCallActive && !incomingCall ? (
           <button
             onClick={startCall}
             disabled={!isInitialized}
@@ -309,7 +316,7 @@ export default function VideoChat({ roomId }: VideoChatProps) {
             <FaPhone className="mr-2" />
             {isInitialized ? 'Start Call' : 'Initializing...'}
           </button>
-        ) : (
+        ) : isCallActive ? (
           <button
             onClick={endCall}
             className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 flex items-center"
@@ -317,7 +324,7 @@ export default function VideoChat({ roomId }: VideoChatProps) {
             <FaPhoneSlash className="mr-2" />
             End Call
           </button>
-        )}
+        ) : null}
       </div>
     </div>
   );
